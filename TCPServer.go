@@ -61,6 +61,7 @@ func (ts *TCPServer) Server() error {
 		//等待客户端接入
 		conn, err := listener.Accept()
 		if nil != err {
+			ts.logger.Warn("server addr:%s server over,err:%v", ts.Addr, err.Error())
 			return err
 		}
 		tcpConn := NewTCPConn(conn, ts.recvCB, ts.writeCB)
