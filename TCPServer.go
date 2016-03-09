@@ -14,6 +14,7 @@ type TCPServer struct {
 	newConnCB *function.Function
 	recvCB    *function.Function
 	writeCB   *function.Function
+	listener  net.Listener
 }
 
 func (ts *TCPServer) Register(opt ...interface{}) error {
@@ -55,6 +56,7 @@ func (ts *TCPServer) Server() error {
 		return err
 	}
 	ts.logger.Info("server addr:%s start success!", ts.Addr)
+	ts.listener = listener
 	for {
 		//等待客户端接入
 		conn, err := listener.Accept()
@@ -66,6 +68,12 @@ func (ts *TCPServer) Server() error {
 			ts.newConnCB.Call(tcpConn)
 		}
 		go tcpConn.Server()
+	}
+}
+
+func (ts *TCPServer) Stop() {
+	if ts.listener != nil {
+		ts.listener.Close()
 	}
 }
 
