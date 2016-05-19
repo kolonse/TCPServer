@@ -15,6 +15,7 @@ type TCPServer struct {
 	recvCB    *function.Function
 	writeCB   *function.Function
 	listener  net.Listener
+	exit      chan bool
 }
 
 func (ts *TCPServer) Register(opt ...interface{}) error {
@@ -53,27 +54,43 @@ func (ts *TCPServer) Server() error {
 	// 启动 TCP 服务
 	listener, err := net.Listen("tcp", ts.Addr)
 	if err != nil {
+		ts.logger.Error("server addr:%s start fail,err:%v", ts.Addr, err.Error())
 		return err
 	}
 	ts.logger.Info("server addr:%s start success!", ts.Addr)
 	ts.listener = listener
-	for {
-		//等待客户端接入
-		conn, err := listener.Accept()
-		if nil != err {
-			ts.logger.Warn("server addr:%s server over,err:%v", ts.Addr, err.Error())
-			return err
+	go func() {
+		for {
+			//等待客户端接入
+			conn, err := listener.Accept()
+			if nil != err {
+				ts.logger.Warn("server addr:%s server over,err:%v", ts.Addr, err.Error())
+				break
+			}
+			tcpConn := NewTCPConn(conn, ts.recvCB, ts.writeCB)
+			if ts.newConnCB != nil {
+				ts.newConnCB.Call(tcpConn)
+			}
+			go tcpConn.Server()
 		}
-		tcpConn := NewTCPConn(conn, ts.recvCB, ts.writeCB)
-		if ts.newConnCB != nil {
-			ts.newConnCB.Call(tcpConn)
-		}
-		go tcpConn.Server()
-	}
+		ts.exit <- true
+	}()
+	return nil
 }
 
 func (ts *TCPServer) Stop() {
 	if ts.listener != nil {
+		ts.listener.Close()
+	}
+}
+
+// 停止函数 并带有一个回调通知退出完成
+func (ts *TCPServer) StopFunc(cb func()) {
+	if ts.listener != nil {
+		go func() {
+			<-ts.exit
+			cb()
+		}()
 		ts.listener.Close()
 	}
 }
@@ -93,6 +110,7 @@ func NewTCPServer(addr string) *TCPServer {
 	return &TCPServer{
 		Addr:   addr,
 		logger: logger,
+		exit:   make(chan bool, 1),
 	}
 }
 
